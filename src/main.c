@@ -5,10 +5,14 @@
 #include <conio.h>
 #include <stdint.h>
 #include <time.h>
+#include <mmsystem.h>
+#include <digitalv.h>
 
 #include "winstd.h"
 #include "blkctl.h"
 #include "error.h"
+
+#pragma comment(lib, "winmm.lib")
 
 #define writes(s) write(1, s, strlen(s))
 
@@ -253,6 +257,17 @@ int main(void)
 
 	writes("\x1b[?25l");
 
+	MCI_OPEN_PARMSA bgm;
+	bgm.lpstrElementName = "res/bgm.wav";
+	bgm.lpstrDeviceType = "waveaudio";
+	mciSendCommandA(0, MCI_OPEN, MCI_OPEN_ELEMENT | MCI_OPEN_TYPE, (ULONG64)(LPVOID)&bgm);
+	mciSendCommandA(bgm.wDeviceID, MCI_PLAY, MCI_DGV_PLAY_REPEAT, (ULONG64)(LPVOID)&bgm);
+
+	MCI_OPEN_PARMSA drop;
+	drop.lpstrElementName = "res/drop.wav";
+	drop.lpstrDeviceType = "waveaudio";
+	mciSendCommandA(0, MCI_OPEN, MCI_OPEN_ELEMENT | MCI_OPEN_TYPE, (ULONG64)(LPVOID)&drop);
+
 	// Allocates buffers
 	BYTE* map = calloc(10 * 20, sizeof *map);
 	BYTE* mapCol = calloc(10 * 20, sizeof *mapCol);
@@ -273,7 +288,7 @@ int main(void)
 	DWORD curRot = 0;
 	BYTE curBlk = BLK_T;
 
-	BYTE slotBlk = BLK_L;
+	BYTE slotBlk = 0xFF;
 	BOOL slotted = FALSE;
 
 	BYTE nextBlk = BLK_J;
@@ -382,6 +397,12 @@ int main(void)
 					slotBlk ^= curBlk;
 					curBlk ^= slotBlk;
 
+					if (curBlk == 0xFF)
+					{
+						curBlk = nextBlk;
+						nextBlk = (rand() % 7) * 4;
+					}
+
 					curX = 4;
 					curY = 0;
 
@@ -407,6 +428,9 @@ int main(void)
 				if (elapsed > GROUND_TIMEOUT)
 				{
 					// TODO: BUG
+					mciSendCommand(drop.wDeviceID, MCI_SEEK, MCI_SEEK_TO_START, 0);
+					mciSendCommandA(drop.wDeviceID, MCI_PLAY, MCI_NOTIFY, (ULONG64)(LPVOID)&drop);
+
 					curBlk = nextBlk;
 					nextBlk = (rand() % 7) * 4;
 					curX = 4;
@@ -483,13 +507,15 @@ int main(void)
 		nCtl.fg = C_FG + ColorTable[nextBlk / 4];
 
 		BlockControl(curX, curY, curBlk + curRot, FillBlock, ctl);
-		BlockControl(0, 0, slotBlk, FillBlock, sCtl);
+		if (slotBlk != 0xFF)
+			BlockControl(0, 0, slotBlk, FillBlock, sCtl);
 		BlockControl(0, 0, nextBlk, FillBlock, nCtl);
 
 		DrawGui(0, 1, map, mapCol, slot, slotCol, next, nextCol, DepthMap, score);
 
 		BlockControl(curX, curY, curBlk + curRot, RevertBlock, ctl);
-		BlockControl(0, 0, slotBlk, RevertBlock, sCtl);
+		if (slotBlk != 0xFF)
+			BlockControl(0, 0, slotBlk, RevertBlock, sCtl);
 		BlockControl(0, 0, nextBlk, RevertBlock, nCtl);
 
 		/* Epilogue */
