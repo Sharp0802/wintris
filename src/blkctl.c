@@ -1,34 +1,34 @@
-#include "blkctl.h"
+#include "../inc/blkctl.h"
 
 
-void fillblk(unsigned char x, unsigned char y, BLKCTL p)
+void FillBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p)
 {
-	int idx = y * p.map.width + x;
-	p.map.data[idx] = p.ch;
-	p.map.fg[idx] = p.fg;
-	p.map.bg[idx] = p.bg;
+	DWORD idx = y * p.width + x;
+	p.data[idx] = p.ch;
+	p.color[idx] = p.fg;
 }
 
-void revertblk(unsigned char x, unsigned char y, BLKCTL p)
+void RevertBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p)
 {
-	int idx = y * p.map.width + x;
-	p.map.data[idx] = CH_SP;
+	DWORD idx = y * p.width + x;
+	p.data[idx] = CH_RM;
 }
 
-void chkblk(unsigned char x, unsigned char y, BLKCTL p)
+void CheckBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p)
 {
-	if (x >= p.map.width || y >= p.map.height)
+	if (x >= p.width || y >= p.height)
 		*p.pb = 0xFF;
-	if (p.map.data[y * p.map.width + x] != CH_SP)
+	if (p.data[y * p.width + x] != CH_SP &&
+	    p.data[y * p.width + x] != CH_RM)
 		*p.pb = 0xFF;
 }
 
-void blkctl(
+void BlockControl(
 		unsigned char x,
 		unsigned char y,
 		unsigned char blk,
-		void (*cb)(unsigned char x, unsigned char y, BLKCTL p),
-		BLKCTL p)
+		void (*cb)(unsigned char x, unsigned char y, BLOCK_CONTROL p),
+		BLOCK_CONTROL p)
 {
 	unsigned char cx, cy;
 	for (int i = 0; i < 4; ++i)
@@ -118,6 +118,23 @@ void blkctl(
 		case BLK_I + 3:
 			cx = i - 1;
 			cy = 1;
+			break;
+
+		case BLK_T + 0:
+			cx = i - (i / 3) * 2;
+			cy = 1 + i / 3;
+			break;
+		case BLK_T + 1:
+			cx = 1 - i / 3;
+			cy = i - (i / 3) * 2;
+			break;
+		case BLK_T + 2:
+			cx = i - (i / 3) * 2;
+			cy = 1 - i / 3;
+			break;
+		case BLK_T + 3:
+			cx = 1 + i / 3;
+			cy = i - (i / 3) * 2;
 			break;
 
 		case BLK_O + 0:
