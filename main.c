@@ -197,6 +197,8 @@ if (!SetConsoleMode(hOut, dwMode))
     char sblk = -1;
     char nblk = BLK_O;
     
+    char sloted = 0;
+    
     BLKCTL arg;
     while (ch != '/')
     {
@@ -245,7 +247,19 @@ if (!SetConsoleMode(hOut, dwMode))
 		break;
 	    
 	    case 'w' /* SLOT */:
-		char tmp = sblk == -1 ? nblk : sblk;
+		if (sloted)
+		    break;
+		
+		char tmp;
+		if (sblk == -1)
+		{
+		    tmp = nblk;
+		    nblk = CH_BR;
+		}
+		else
+		{
+		    tmp = sblk;
+		}
 		
 		sblk = blk;
 		if (sblk / 4 * 4 == BLK_I)
@@ -256,10 +270,15 @@ if (!SetConsoleMode(hOut, dwMode))
 		y = 0;
 		
 		arg.map = slot;
+		arg.ch = cell;
+		arg.fg = C_WHITE;
+		arg.bg = C_BLACK;
 		memset(slot.data, CH_SP, slot.width * slot.height);
 		blkctl(0, 0, sblk, fillblk, arg);
 		drawmap(11 * lw + 2, 1, slot, lw, lh);
 		arg.map = map;
+		
+		sloted = 0xFF;
 		
 		break;
 	    }

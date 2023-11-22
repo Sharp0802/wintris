@@ -3,7 +3,7 @@ C := $(wildcard *.c)
 O := $(C:.c=.o)
 
 all: $(O)
-	gcc $^ -o tetris
+	gcc $^ -o t.out
 
 %.o: %.c
 	gcc -c $^ -o $@
