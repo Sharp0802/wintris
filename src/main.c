@@ -48,7 +48,7 @@ static BOXINFO DoubleBox = {
 
 static BOXINFO SlotBox = {
 		"┱", "─", "┐",
-		"┃", "│",
+		"┃",      "│",
 		"╂", "─", "┤"
 };
 
@@ -428,11 +428,26 @@ int main(void)
 				if (elapsed > GROUND_TIMEOUT)
 				{
 					// TODO: BUG
-					mciSendCommand(drop.wDeviceID, MCI_SEEK, MCI_SEEK_TO_START, 0);
+					mciSendCommandA(drop.wDeviceID, MCI_SEEK, MCI_SEEK_TO_START, 0);
 					mciSendCommandA(drop.wDeviceID, MCI_PLAY, MCI_NOTIFY, (ULONG64)(LPVOID)&drop);
 
+					// MARK
+					ctl.data = map;
+					ctl.color = mapCol;
+					ctl.height = 20;
+					ctl.width = 10;
+					ctl.ch = CH_B2;
+					ctl.fg = C_FG + ColorTable[curBlk / 4];
+					BlockControl(curX, curY, curBlk + curRot, FillBlock, ctl);
+
+					score += CheckLine(RevertLine, ctl) * 500;
+
+					// SWAP
 					curBlk = nextBlk;
-					nextBlk = (rand() % 7) * 4;
+					do
+					{
+						nextBlk = (rand() % 7) * 4;
+					} while (curBlk == nextBlk);
 					curX = 4;
 					curY = 0;
 					slotted = FALSE;

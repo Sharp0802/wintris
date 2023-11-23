@@ -24,6 +24,11 @@ typedef struct
 } BLOCK_CONTROL;
 
 
+void RevertLine(unsigned char y, BLOCK_CONTROL p);
+
+DWORD CheckLine(void (*cb)(unsigned char y, BLOCK_CONTROL p), BLOCK_CONTROL p);
+
+
 void FillBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p);
 
 void RevertBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p);

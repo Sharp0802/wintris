@@ -8,3 +8,4 @@ add_executable(wintris
         src/winstd.c
         src/error.c
 )
+target_compile_features(wintris PRIVATE c_std_99)

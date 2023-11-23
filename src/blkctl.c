@@ -1,4 +1,41 @@
-#include "../inc/blkctl.h"
+#include "blkctl.h"
+
+void RevertLine(unsigned char y, BLOCK_CONTROL p)
+{
+	for (DWORD i = y; i >= 1; i--)
+	{
+		for (DWORD x = 0; x < p.width; ++x)
+		{
+			p.data[i * p.width + x] = p.data[(i - 1) * p.width + x] == CH_SP ? CH_RM : p.data[(i - 1) * p.width + x];
+			p.color[i * p.width + x] = p.color[(i - 1) * p.width + x];
+			p.data[(i - 1) * p.width + x] = CH_RM;
+		}
+	}
+
+	for (DWORD x = 0; x < p.width; ++x)
+		p.data[x] = CH_RM;
+}
+
+DWORD CheckLine(void (*cb)(unsigned char y, BLOCK_CONTROL p), BLOCK_CONTROL p)
+{
+	DWORD cnt = 0;
+	for (DWORD y = 0; y < p.height; ++y)
+	{
+		BOOL b = TRUE;
+		for (DWORD x = 0; x < p.width; ++x)
+		{
+			BYTE c = p.data[y * p.width + x];
+			if (c == CH_RM || c == CH_SP)
+				b = FALSE;
+		}
+		if (b)
+		{
+			cb(y, p);
+			cnt++;
+		}
+	}
+	return cnt;
+}
 
 
 void FillBlock(unsigned char x, unsigned char y, BLOCK_CONTROL p)
