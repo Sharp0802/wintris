@@ -7,5 +7,6 @@ add_executable(wintris
         src/main.c
         src/winstd.c
         src/error.c
+        src/inits.c
 )
 target_compile_features(wintris PRIVATE c_std_99)

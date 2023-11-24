@@ -4,18 +4,17 @@
 #include <windows.h>
 #include <conio.h>
 #include <stdint.h>
-#include <time.h>
 #include <mmsystem.h>
 #include <digitalv.h>
 
 #include "winstd.h"
 #include "blkctl.h"
 #include "error.h"
+#include "inits.h"
 
 #pragma comment(lib, "winmm.lib")
 
 #define writes(s) write(1, s, strlen(s))
-
 
 #define GROUND_TIMEOUT (500)
 
@@ -80,6 +79,7 @@ BYTE ColorTable[] = {
 #define ST_COMPLETED 1
 #define ST_OVER 2
 
+/* Draw a box with specified config */
 void DrawBox(
 		DWORD x,
 		DWORD y,
@@ -130,6 +130,7 @@ void DrawBox(
 	writes(p);
 }
 
+/* Draw a criteria-line with specified config */
 void DrawCriteria(
 		DWORD x,
 		DWORD y,
@@ -144,6 +145,7 @@ void DrawCriteria(
 	writes("┨");
 }
 
+/* Draw a score-box with specified config */
 void DrawScore(
 		DWORD x,
 		DWORD y,
@@ -156,6 +158,7 @@ void DrawScore(
 	fflush(stdout);
 }
 
+/* Draw a whole map with specified config */
 void DrawMap(
 		DWORD x,
 		DWORD y,
@@ -192,6 +195,7 @@ void DrawMap(
 	fflush(stdout);
 }
 
+/* Draw a main-menu */
 void DrawMenu(int* level)
 {
 	clrscr();
@@ -234,6 +238,7 @@ E_SELECT:
 	}
 }
 
+/* Draw a paused-menu */
 void DrawPause(BOOL* exit)
 {
 	clrscr();
@@ -254,7 +259,7 @@ void DrawPause(BOOL* exit)
 		writes(view ? "<PAUSED>" : "        ");
 
 		gotoxy(3, 3);
-		writes("1. No, Start new stage. (default)");
+		writes("1. No, Restart the stage. (default)");
 		gotoxy(3, 5);
 		writes("2. Yes, quit game.");
 
@@ -266,6 +271,7 @@ void DrawPause(BOOL* exit)
 	}
 }
 
+/* Draw a whole GUI */
 DWORD DrawGui(
 		DWORD x,
 		DWORD y,
@@ -277,7 +283,6 @@ DWORD DrawGui(
 		const BYTE* nextCol,
 		const LPCSTR* chv,
 		LPCSTR title,
-
 		DWORD score)
 {
 	DWORD width = 10;
@@ -305,6 +310,7 @@ DWORD DrawGui(
 	return wMain + wSub + 3;
 }
 
+/* Run a single-player scenario */
 DWORD SinglePlayer(
 		DWORD x,
 		DWORD y,
@@ -346,6 +352,7 @@ DWORD SinglePlayer(
 	DWORD curY = 0;
 	DWORD curRot = 0;
 	BYTE curBlk = BLK_T;
+	BYTE curCh = CH_B1;
 
 	BYTE slotBlk = 0xFF;
 	BOOL slotted = FALSE;
@@ -489,6 +496,13 @@ DWORD SinglePlayer(
 				ULONG64 elapsed = GetTickCount64() - groundTick;
 				if (elapsed > GROUND_TIMEOUT)
 				{
+					if (curY <= 4)
+					{
+						exit = TRUE;
+						over = TRUE;
+						goto SKIP;
+					}
+
 					mciSendCommandA(drop.wDeviceID, MCI_SEEK, MCI_SEEK_TO_START, 0);
 					mciSendCommandA(drop.wDeviceID, MCI_PLAY, MCI_NOTIFY, (ULONG64)(LPVOID)&drop);
 
@@ -497,7 +511,7 @@ DWORD SinglePlayer(
 					ctl.color = mapCol;
 					ctl.height = 20;
 					ctl.width = 10;
-					ctl.ch = CH_B2;
+					ctl.ch = curCh;
 					ctl.fg = C_FG + ColorTable[curBlk / 4];
 					BlockControl(curX, curY, curBlk + curRot, FillBlock, ctl);
 
@@ -506,7 +520,7 @@ DWORD SinglePlayer(
 					line += tLine;
 					score += tLine * tLine * 500;
 
-					if (line >= 2)
+					if (line >= 40)
 					{
 						exit = TRUE;
 						goto SKIP;
@@ -514,6 +528,7 @@ DWORD SinglePlayer(
 
 					// SWAP
 					curBlk = nextBlk;
+					curCh = CH_BR;
 					do
 					{
 						nextBlk = (rand() % 7) * 4;
@@ -575,21 +590,21 @@ DWORD SinglePlayer(
 		ctl.color = mapCol;
 		ctl.height = 20;
 		ctl.width = 10;
-		ctl.ch = CH_B2;
+		ctl.ch = curCh;
 		ctl.fg = C_FG + ColorTable[curBlk / 4];
 
 		sCtl.data = slot;
 		sCtl.color = slotCol;
 		sCtl.height = 4;
 		sCtl.width = 4;
-		sCtl.ch = CH_B2;
+		sCtl.ch = curCh;
 		sCtl.fg = C_FG + ColorTable[slotBlk / 4];
 
 		nCtl.data = next;
 		nCtl.color = nextCol;
 		nCtl.height = 4;
 		nCtl.width = 4;
-		nCtl.ch = CH_B2;
+		nCtl.ch = curCh;
 		nCtl.fg = C_FG + ColorTable[nextBlk / 4];
 
 		/* Buffer Cursor */
@@ -625,11 +640,11 @@ DWORD SinglePlayer(
 		gotoxy(x + 1, y + 11);
 		printf("  STAGE COMPLETED!  ");
 		gotoxy(x + 1, y + 13);
-		printf("  press any key to  ");
+		printf("  press '5' key to  ");
 		gotoxy(x + 1, y + 14);
 		printf("  continue...       ");
 
-		_getch();
+		while (_getch() != '5');
 
 		ret = ST_COMPLETED;
 	}
@@ -638,11 +653,11 @@ DWORD SinglePlayer(
 		gotoxy(x + 1, y + 11);
 		printf("    GAME OVER...    ");
 		gotoxy(x + 1, y + 13);
-		printf("  press any key to  ");
+		printf("  press '5' key to  ");
 		gotoxy(x + 1, y + 14);
 		printf("  continue...       ");
 
-		_getch();
+		while (_getch() != '5');
 
 		ret = ST_OVER;
 	}
@@ -707,7 +722,7 @@ int main(void)
 	while (1)
 	{
 		clrscr();
-		DWORD state = SinglePlayer(1, 1, NULL, level);
+		DWORD state = SinglePlayer(1, 1, InitializeMap, level);
 		clrscr();
 		switch (state)
 		{
