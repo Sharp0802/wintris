@@ -707,6 +707,33 @@ int main(void)
 	// Disable Cursor
 	writes("\x1b[?25l");
 
+	// Load Splash
+	BITMAP bm;
+	HBITMAP hbm = LoadImageA(
+			GetModuleHandleA(NULL),
+			"res/splash.bmp",
+			IMAGE_BITMAP,
+			0, 0,
+			LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_CREATEDIBSECTION);;
+	HWND hwnd = GetConsoleWindow();
+
+	Sleep(500);
+
+	// Render Splash
+	HDC hdc = GetDC(hwnd);
+	HDC hdcMem = CreateCompatibleDC(hdc);
+	HBITMAP hbmOld = SelectObject(hdcMem, hbm);
+
+	GetObject(hbm, sizeof(bm), &bm);
+	if (!BitBlt(hdc, 0, 0, bm.bmWidth, bm.bmHeight, hdcMem, 0, 0, SRCCOPY))
+		AssertWin32(GetLastError());
+
+	SelectObject(hdcMem, hbmOld);
+	DeleteDC(hdcMem);
+	ReleaseDC(hwnd, hdc);
+
+	Sleep(2000);
+
 	// Load Audio
 	MCI_OPEN_PARMSA bgm;
 	bgm.lpstrElementName = "res/bgm.wav";
