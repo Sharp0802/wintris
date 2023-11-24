@@ -17,7 +17,7 @@
 #define writes(s) write(1, s, strlen(s))
 
 
-#define GROUND_TIMEOUT (1500)
+#define GROUND_TIMEOUT (500)
 
 
 typedef struct
@@ -188,6 +188,13 @@ void DrawMap(
 	fflush(stdout);
 }
 
+DWORD DrawMenu()
+{
+	clrscr();
+
+
+}
+
 DWORD DrawGui(
 		DWORD x,
 		DWORD y,
@@ -198,6 +205,8 @@ DWORD DrawGui(
 		BYTE* next,
 		const BYTE* nextCol,
 		const LPCSTR* chv,
+		LPCSTR title,
+
 		DWORD score)
 {
 	DWORD width = 10;
@@ -216,7 +225,7 @@ DWORD DrawGui(
 	DrawBox(x + wMain + 1, y + 3, wSub, hSub, SlotBox);
 	DrawBox(x + wMain + 1, y + hSub + 4, wSub, hSub, NextBox);
 
-	DrawScore(x, y, wMain + wSub + 1, "Syw0802", score);
+	DrawScore(x, y, wMain + wSub + 1, title, score);
 
 	DrawMap(x + 1, y + 4, width, height, 2, map, mapCol, chv);
 	DrawMap(x + wMain + 2, y + 4, 4, 4, 2, slot, slotCol, chv);
@@ -225,44 +234,17 @@ DWORD DrawGui(
 	return wMain + wSub + 3;
 }
 
-int main(void)
+BOOL SinglePlayer(
+		DWORD x,
+		DWORD y,
+		void (*init)(int level, BYTE* map, BYTE* col),
+		int level)
 {
-	srand(time(NULL));
+	// Load Title
+	CHAR title[512];
+	snprintf(title, sizeof title, "Level %d", level);
 
-	// Enable UTF8
-	SetConsoleOutputCP(CP_UTF8);
-	SetConsoleCP(CP_UTF8);
-
-	// Enable ANSI Sequences
-	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hOut == INVALID_HANDLE_VALUE)
-		AssertWin32(GetLastError());
-	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
-	if (hIn == INVALID_HANDLE_VALUE)
-		AssertWin32(GetLastError());
-
-	DWORD outMode = 0;
-	DWORD inMode = 0;
-	if (!GetConsoleMode(hOut, &outMode))
-		AssertWin32(GetLastError());
-	if (!GetConsoleMode(hIn, &inMode))
-		AssertWin32(GetLastError());
-
-	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
-	inMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
-	if (!SetConsoleMode(hOut, outMode))
-		AssertWin32(GetLastError());
-	if (!SetConsoleMode(hIn, inMode))
-		AssertWin32(GetLastError());
-
-	writes("\x1b[?25l");
-
-	MCI_OPEN_PARMSA bgm;
-	bgm.lpstrElementName = "res/bgm.wav";
-	bgm.lpstrDeviceType = "waveaudio";
-	mciSendCommandA(0, MCI_OPEN, MCI_OPEN_ELEMENT | MCI_OPEN_TYPE, (ULONG64)(LPVOID)&bgm);
-	mciSendCommandA(bgm.wDeviceID, MCI_PLAY, MCI_DGV_PLAY_REPEAT, (ULONG64)(LPVOID)&bgm);
-
+	// Load Audios
 	MCI_OPEN_PARMSA drop;
 	drop.lpstrElementName = "res/drop.wav";
 	drop.lpstrDeviceType = "waveaudio";
@@ -278,9 +260,14 @@ int main(void)
 	BYTE* next = calloc(4 * 4, sizeof *next);
 	BYTE* nextCol = calloc(4 * 4, sizeof *nextCol);
 
-	// Start game
-	BOOL exit = FALSE;
+	if (init)
+		init(level, map, mapCol);
 
+	// Start Game
+	BOOL exit = FALSE;
+	BOOL ret = TRUE;
+
+	DWORD line = 0;
 	DWORD score = 0;
 
 	DWORD curX = 4;
@@ -297,7 +284,9 @@ int main(void)
 	ULONG64 groundTick = 0;
 
 	ULONG64 globalTick = 0;
-	ULONG64 downInterval = 500;
+	ULONG64 downInterval = 500 - level * level;
+	if (downInterval < 100)
+		downInterval = 100;
 
 	INPUT_RECORD ir;
 	DWORD nir;
@@ -319,6 +308,7 @@ int main(void)
 				if (vkey == VK_ESCAPE)
 				{
 					exit = TRUE;
+					ret = FALSE;
 					break;
 				}
 
@@ -427,7 +417,6 @@ int main(void)
 				ULONG64 elapsed = GetTickCount64() - groundTick;
 				if (elapsed > GROUND_TIMEOUT)
 				{
-					// TODO: BUG
 					mciSendCommandA(drop.wDeviceID, MCI_SEEK, MCI_SEEK_TO_START, 0);
 					mciSendCommandA(drop.wDeviceID, MCI_PLAY, MCI_NOTIFY, (ULONG64)(LPVOID)&drop);
 
@@ -440,7 +429,16 @@ int main(void)
 					ctl.fg = C_FG + ColorTable[curBlk / 4];
 					BlockControl(curX, curY, curBlk + curRot, FillBlock, ctl);
 
-					score += CheckLine(RevertLine, ctl) * 500;
+					// CLEAR LINE
+					DWORD tLine = CheckLine(RevertLine, ctl);
+					line += tLine;
+					score += tLine * tLine * 500;
+
+					if (line >= 2)
+					{
+						exit = TRUE;
+						goto SKIP;
+					}
 
 					// SWAP
 					curBlk = nextBlk;
@@ -453,6 +451,7 @@ int main(void)
 					slotted = FALSE;
 					ground = FALSE;
 
+					// SCORING
 					score += 50;
 					downInterval -= downInterval / 30;
 					if (downInterval < 100)
@@ -499,7 +498,7 @@ int main(void)
 		}
 
 	SKIP:
-		/* Frame */
+		/* Configure Renderer */
 		ctl.data = map;
 		ctl.color = mapCol;
 		ctl.height = 20;
@@ -521,19 +520,41 @@ int main(void)
 		nCtl.ch = CH_B2;
 		nCtl.fg = C_FG + ColorTable[nextBlk / 4];
 
+		/* Buffer Cursor */
 		BlockControl(curX, curY, curBlk + curRot, FillBlock, ctl);
 		if (slotBlk != 0xFF)
 			BlockControl(0, 0, slotBlk, FillBlock, sCtl);
 		BlockControl(0, 0, nextBlk, FillBlock, nCtl);
 
-		DrawGui(0, 1, map, mapCol, slot, slotCol, next, nextCol, DepthMap, score);
+		/* Render Buffer */
+		DrawGui(x, y, map, mapCol, slot, slotCol, next, nextCol, DepthMap, title, score);
 
+		/* Clear Cursor */
 		BlockControl(curX, curY, curBlk + curRot, RevertBlock, ctl);
 		if (slotBlk != 0xFF)
 			BlockControl(0, 0, slotBlk, RevertBlock, sCtl);
 		BlockControl(0, 0, nextBlk, RevertBlock, nCtl);
+	}
 
-		/* Epilogue */
+	if (ret)
+	{
+		memset(map, CH_RM, 200);
+		memset(mapCol, 0, 200);
+		memset(slot, CH_RM, 16);
+		memset(slotCol, 0, 16);
+		memset(next, CH_RM, 16);
+		memset(nextCol, 0, 16);
+
+		DrawGui(x, y, map, mapCol, slot, slotCol, next, nextCol, DepthMap, title, score);
+
+		gotoxy(x + 1, y + 11);
+		printf("  STAGE COMPLETED!  ");
+		gotoxy(x + 1, y + 13);
+		printf("  press any key to  ");
+		gotoxy(x + 1, y + 14);
+		printf("  continue...       ");
+
+		_getch();
 	}
 
 	// Finalize game
@@ -543,6 +564,73 @@ int main(void)
 	free(mapCol);
 	free(slotCol);
 	free(nextCol);
+
+	return ret;
+}
+
+int main(void)
+{
+	// Initialize PRNG
+	srand(GetTickCount64());
+
+	// Enable UTF8
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+
+	// Enable ANSI Sequences
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hOut == INVALID_HANDLE_VALUE)
+		AssertWin32(GetLastError());
+	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+	if (hIn == INVALID_HANDLE_VALUE)
+		AssertWin32(GetLastError());
+
+	DWORD outMode = 0;
+	DWORD inMode = 0;
+	if (!GetConsoleMode(hOut, &outMode))
+		AssertWin32(GetLastError());
+	if (!GetConsoleMode(hIn, &inMode))
+		AssertWin32(GetLastError());
+
+	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
+	inMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+	if (!SetConsoleMode(hOut, outMode))
+		AssertWin32(GetLastError());
+	if (!SetConsoleMode(hIn, inMode))
+		AssertWin32(GetLastError());
+
+	// Disable Cursor
+	writes("\x1b[?25l");
+
+	// Load Audio
+	MCI_OPEN_PARMSA bgm;
+	bgm.lpstrElementName = "res/bgm.wav";
+	bgm.lpstrDeviceType = "waveaudio";
+	mciSendCommandA(0, MCI_OPEN, MCI_OPEN_ELEMENT | MCI_OPEN_TYPE, (ULONG64)(LPVOID)&bgm);
+	mciSendCommandA(bgm.wDeviceID, MCI_PLAY, MCI_DGV_PLAY_REPEAT, (ULONG64)(LPVOID)&bgm);
+
+	int level = 1;
+
+	FILE* fp = fopen("./save.dat", "r");
+	if (fp)
+	{
+		fread(&level, sizeof level, 1, fp);
+		fclose(fp);
+	}
+
+	while (1)
+	{
+		clrscr();
+		if (SinglePlayer(1, 1, NULL, level))
+		{
+			clrscr();
+			level++;
+
+			fp = fopen("./save.dat", "w");
+			fwrite(&level, sizeof level, 1, fp);
+			fclose(fp);
+		}
+	}
 
 	return 0;
 }
