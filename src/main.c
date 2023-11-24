@@ -36,13 +36,13 @@ typedef struct
 
 static BOXINFO GenericBox = {
 		"┏", "━", "┓",
-		"┃", "┃",
+		"┃",      "┃",
 		"┗", "━", "┛"
 };
 
 static BOXINFO DoubleBox = {
 		"╔", "═", "╗",
-		"║", "║",
+		"║",      "║",
 		"╚", "═", "╝"
 };
 
@@ -54,7 +54,7 @@ static BOXINFO SlotBox = {
 
 static BOXINFO NextBox = {
 		"╂", "─", "┤",
-		"┃", "│",
+		"┃",      "│",
 		"┠", "─", "┘"
 };
 
@@ -75,6 +75,10 @@ BYTE ColorTable[] = {
 		C_MAGENTA,
 		C_RED
 };
+
+#define ST_REFUSED 0
+#define ST_COMPLETED 1
+#define ST_OVER 2
 
 void DrawBox(
 		DWORD x,
@@ -188,11 +192,78 @@ void DrawMap(
 	fflush(stdout);
 }
 
-DWORD DrawMenu()
+void DrawMenu(int* level)
 {
 	clrscr();
 
+	DrawBox(1, 1, 40, 5, DoubleBox);
 
+	gotoxy(3, 0);
+	writes("<WINTRIS>   by   Sharp0802 & luke0422");
+	gotoxy(3, 3);
+	writes("1. Load data");
+	gotoxy(3, 5);
+	writes("2. Start new");
+
+E_SELECT:
+	switch (_getch())
+	{
+	case '1':
+	{
+		FILE* fp = fopen("./save.dat", "r");
+		if (fp)
+		{
+			fread(level, sizeof *level, 1, fp);
+			fclose(fp);
+		}
+		break;
+	}
+	case '2':
+	{
+		FILE* fp = fopen("./save.dat", "w");
+		if (fp)
+		{
+			*level = 1;
+			fwrite(level, sizeof *level, 1, fp);
+			fclose(fp);
+		}
+		break;
+	}
+	default:
+		goto E_SELECT;
+	}
+}
+
+void DrawPause(BOOL* exit)
+{
+	clrscr();
+
+	BOOL view = TRUE;
+	ULONG64 tick = GetTickCount64();
+	while (1)
+	{
+		DrawBox(1, 1, 40, 5, DoubleBox);
+
+		if (GetTickCount64() - tick > 500)
+		{
+			tick = GetTickCount64();
+			view = !view;
+		}
+
+		gotoxy(3, 0);
+		writes(view ? "<PAUSED>" : "        ");
+
+		gotoxy(3, 3);
+		writes("1. No, Start new stage. (default)");
+		gotoxy(3, 5);
+		writes("2. Yes, quit game.");
+
+		if (_kbhit())
+		{
+			*exit = _getch() == '2';
+			break;
+		}
+	}
 }
 
 DWORD DrawGui(
@@ -234,7 +305,7 @@ DWORD DrawGui(
 	return wMain + wSub + 3;
 }
 
-BOOL SinglePlayer(
+DWORD SinglePlayer(
 		DWORD x,
 		DWORD y,
 		void (*init)(int level, BYTE* map, BYTE* col),
@@ -265,7 +336,8 @@ BOOL SinglePlayer(
 
 	// Start Game
 	BOOL exit = FALSE;
-	BOOL ret = TRUE;
+	DWORD ret = TRUE;
+	BOOL over = FALSE;
 
 	DWORD line = 0;
 	DWORD score = 0;
@@ -534,19 +606,22 @@ BOOL SinglePlayer(
 		if (slotBlk != 0xFF)
 			BlockControl(0, 0, slotBlk, RevertBlock, sCtl);
 		BlockControl(0, 0, nextBlk, RevertBlock, nCtl);
+
+		// Limit framerate to 100
+		Sleep(10);
 	}
 
-	if (ret)
+	memset(map, CH_RM, 200);
+	memset(mapCol, 0, 200);
+	memset(slot, CH_RM, 16);
+	memset(slotCol, 0, 16);
+	memset(next, CH_RM, 16);
+	memset(nextCol, 0, 16);
+
+	DrawGui(x, y, map, mapCol, slot, slotCol, next, nextCol, DepthMap, title, score);
+
+	if (ret && !over)
 	{
-		memset(map, CH_RM, 200);
-		memset(mapCol, 0, 200);
-		memset(slot, CH_RM, 16);
-		memset(slotCol, 0, 16);
-		memset(next, CH_RM, 16);
-		memset(nextCol, 0, 16);
-
-		DrawGui(x, y, map, mapCol, slot, slotCol, next, nextCol, DepthMap, title, score);
-
 		gotoxy(x + 1, y + 11);
 		printf("  STAGE COMPLETED!  ");
 		gotoxy(x + 1, y + 13);
@@ -555,6 +630,21 @@ BOOL SinglePlayer(
 		printf("  continue...       ");
 
 		_getch();
+
+		ret = ST_COMPLETED;
+	}
+	else if (ret)
+	{
+		gotoxy(x + 1, y + 11);
+		printf("    GAME OVER...    ");
+		gotoxy(x + 1, y + 13);
+		printf("  press any key to  ");
+		gotoxy(x + 1, y + 14);
+		printf("  continue...       ");
+
+		_getch();
+
+		ret = ST_OVER;
 	}
 
 	// Finalize game
@@ -609,28 +699,39 @@ int main(void)
 	mciSendCommandA(0, MCI_OPEN, MCI_OPEN_ELEMENT | MCI_OPEN_TYPE, (ULONG64)(LPVOID)&bgm);
 	mciSendCommandA(bgm.wDeviceID, MCI_PLAY, MCI_DGV_PLAY_REPEAT, (ULONG64)(LPVOID)&bgm);
 
-	int level = 1;
+	// Select level
+	int level;
+	DrawMenu(&level);
 
-	FILE* fp = fopen("./save.dat", "r");
-	if (fp)
-	{
-		fread(&level, sizeof level, 1, fp);
-		fclose(fp);
-	}
-
+	// Run game loop
 	while (1)
 	{
 		clrscr();
-		if (SinglePlayer(1, 1, NULL, level))
+		DWORD state = SinglePlayer(1, 1, NULL, level);
+		clrscr();
+		switch (state)
 		{
-			clrscr();
+		case ST_COMPLETED:
+		{
 			level++;
 
-			fp = fopen("./save.dat", "w");
+			FILE* fp = fopen("./save.dat", "w");
 			fwrite(&level, sizeof level, 1, fp);
 			fclose(fp);
+			break;
+		}
+		case ST_REFUSED:
+		{
+			BOOL exit;
+			DrawPause(&exit);
+			if (exit)
+				goto E_EXIT;
+			break;
+		}
+		case ST_OVER:
+			break;
 		}
 	}
-
+E_EXIT:
 	return 0;
 }
